@@ -1,0 +1,160 @@
+# Copyright (c) 2014 Chris Barrick <cbarrick1@gmail.com>
+#
+# Permission to use, copy, modify, and/or distribute this software for any
+# purpose with or without fee is hereby granted, provided that the above
+# copyright notice and this permission notice appear in all copies.
+#
+# THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES WITH
+# REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY
+# AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY SPECIAL, DIRECT,
+# INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM
+# LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR
+# OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
+# PERFORMANCE OF THIS SOFTWARE.
+
+function bmv {
+
+	local version="1.0.0"
+
+	local -A opts  # Associative array of options, filled by `zparseopts`
+	local cmd      # The command which will receive the old and new filenames, i.e. `mv`
+	local command  # The full command to run, i.e. `mv oldfile newfile`
+	local dry      # 1 if we should do a dry run, else 0
+	local usage    # The help message
+
+
+	# Usage
+	# -------------------------
+
+	usage=$(cat <<- END
+		Perform batch file operations using a text editor.
+
+		Usage:
+
+		    bmv [options] <files>
+
+		Options:
+
+		    -c, --command <command>
+		        Execute the given command with the old and new filenames as
+		        arguments. The default command is 'mv -v'.
+
+		    -d, --dry-run
+		        Print the commands which would be executed and exit.
+
+		    -v, --version
+		        Print the version and exit.
+
+		    -h, --help
+		        Print this help message and exit.
+
+		Error codes:
+
+		    1   The number of file names returned by the editor does not match the
+		        number of files being renamed.
+
+		    2   The editor failed.
+
+		    3   The command failed to process a file.
+	END)
+
+
+	# Option parsing
+	# -------------------------
+
+	zparseopts -E -D -A opts \
+		"c:" "-command:" \
+		"d" "-dry-run" \
+		"v" "-version" \
+		"h" "-help"
+
+	# `-h` prints the usage message
+	if [[ ${+opts[-h]} == 1 || ${+opts[--help]} == 1 || ${#@} == 0 ]]; then
+		echo $usage
+		return
+	fi
+
+	# `-v` prints the version and exits
+	if [[ ${+opts[-v]} == 1 || ${+opts[--version]} == 1 ]] ; then
+		echo $version
+		return
+	fi
+
+	# `-c` specifies the command to use, defaults to "mv -v"
+	if [[ ${+opts[--command]} == 1 ]]; then
+		cmd=$opts[--command]
+	elif [[ ${+opts[-c]} == 1 ]]; then
+		cmd=$opts[-c]
+	else
+		cmd="mv -v"
+	fi
+
+	# `-d` tells us to do a dry run
+	if [[ ${+opts[-d]} == 1 || ${+opts[--dry-run]} == 1 ]]; then
+		dry=1
+	else
+		dry=0
+	fi
+
+
+	# Implementation
+	# -------------------------
+
+	# Create a temporary file that will contain the filenames for the user to edit
+	local newnames=$(mktemp 'newnames.XXXXXXXX')
+
+	# Call this before returning
+	function cleanup {
+		rm $newnames
+	}
+
+	# General error handler
+	function abort {
+		echo 'aborting'
+		cleanup
+		return $1
+	}
+
+	# ^C handler
+	function TRAPINT {
+		echo ''
+		abort $(( 128 + $1 ))
+	}
+
+	# Write the old filenames to the tmp file and call the user's editor
+	print -l -- "$@" > $newnames
+	${=VISUAL:-${=EDITOR:-vi}} $newnames
+
+	# Only continue if the editor succeeded
+	if [[ $? > 0 ]]; then
+		abort 2
+	fi
+
+
+	# Check that the number of lines in the file matches the number of files being renamed
+	local num_oldnames=${#@}
+	local num_newnames=$(sed -n '$=' $newnames)
+	if [[ $num_oldnames != $num_newnames ]]; then
+		echo "Fatal: Expected $num_oldnames filenames, saw $num_newnames"
+		abort 1
+	fi
+
+	# Rename the files
+	integer i=1
+	for newname in $(cat $newnames); do
+		command="${=cmd} -- ${@[i]} $newname"
+		if (( $dry )); then
+			echo "would execute:" $command
+		else
+			${=command}
+			if [[ $? > 0 ]]; then
+				abort 3
+			fi
+		fi
+		i+=1
+	done
+
+	# Cleanup and go home
+	cleanup && return
+
+}
