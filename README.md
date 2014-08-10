@@ -49,30 +49,30 @@ Installation
 -------------------------
 
 1. Clone this repository
-```
-git clone https://github.com/cbarrick/bmv.zsh.git
-```
+    ```
+    git clone https://github.com/cbarrick/bmv.zsh.git
+    ```
 
 2. Put the script on your fpath
-```
-ln -s bmv.zsh/bmv /usr/share/zsh/site-functions/bmv
-```
+    ```
+    ln -s bmv.zsh/bmv /usr/share/zsh/site-functions/bmv
+    ```
 
 3. Load the script
-```
-autoload bmv
-```
+    ```
+    autoload bmv
+    ```
 
-You probably want to load the script in your `.zshrc` to make it avaliable to all interactive shells.
+You probably want to load the script in `.zshrc` to make it avaliable to all interactive shells.
 
 
 Tips
 -------------------------
 
 - Use the `-c` option to let bmv work with your version control system:
-```
-bmv -c 'git mv' **/*.py
-```
+    ```
+    bmv -c 'git mv' **/*.py
+    ```
 
 - Most editors have powerful regular expression systems. Learn to use them for the  best experience.
 
